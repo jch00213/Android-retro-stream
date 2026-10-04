@@ -19,13 +19,23 @@ jobs:
         with:
           targets: aarch64-linux-android
 
+      - name: Install Android SDK & NDK
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: "26.1.10909125" # Stable NDK version for modern cargo-ndk compatibility
+
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
 
-      - name: Build Rust Crate for ARM64 Android via cargo-ndk
+      - name: Build Rust Crate for ARM64 Android
+        env:
+          RUST_BACKTRACE: 1
         run: |
-          # --release goes AFTER the build subcommand
-          cargo ndk -t arm64-v8a build --release
+          cargo ndk \
+            --target arm64-v8a \
+            --platform 24 \
+            --build-dir target \
+            build --release -vv
 
       - name: Upload Native Library Artifact
         uses: actions/upload-artifact@v4
