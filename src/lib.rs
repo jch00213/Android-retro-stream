@@ -9,7 +9,7 @@ struct StreamingServer {
     target_addr: String,
 }
 
-// Use an RwLock or Mutex option so we can safely tear down and re-bind across stream sessions
+// Use an RwLock so we can safely tear down and re-bind across stream sessions
 static SERVER: RwLock<Option<Mutex<StreamingServer>>> = RwLock::new(None);
 
 /// Initializes the UDP socket bound to a local port
@@ -21,7 +21,6 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
 ) -> jboolean {
     let bind_addr = format!("0.0.0.0:{}", port);
     
-    // Bind the socket
     let socket = match UdpSocket::bind(&bind_addr) {
         Ok(s) => s,
         Err(e) => {
@@ -37,7 +36,6 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
         target_addr: "192.168.49.1:9000".to_string(),
     };
 
-    // Safely overwrite or set the global state on every start request
     if let Ok(mut guard) = SERVER.write() {
         *guard = Some(Mutex::new(server));
         JNI_TRUE
@@ -55,15 +53,18 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_sendVideoPacket(
     presentation_time_us: jlong,
     is_key_frame: jboolean,
 ) {
-    let server_lock = match SERVER.read() {
-        Ok(guard) => match &*guard {
-            Some(s) => s,
-            None => return,
-        },
+    // Keep the read guard bound in the outer scope so it lives long enough for the inner lock
+    let server_lock_guard = match SERVER.read() {
+        Ok(guard) => guard,
         Err(_) => return,
     };
 
-    let server = match server_lock.lock() {
+    let server_mutex = match &*server_lock_guard {
+        Some(s) => s,
+        None => return,
+    };
+
+    let server = match server_mutex.lock() {
         Ok(guard) => guard,
         Err(_) => return,
     };
@@ -92,7 +93,7 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_stopServer(
     _class: JClass,
 ) {
     if let Ok(mut guard) = SERVER.write() {
-        *guard = None; // Drops the socket and frees the port immediately
+        *guard = None;
     }
     println!("Rust streaming core shutdown and socket released.");
 }
