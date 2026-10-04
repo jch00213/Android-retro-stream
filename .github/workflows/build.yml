@@ -19,10 +19,10 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Install Android SDK & NDK
-        uses: android-actions/setup-android@v3
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
         with:
-          ndk-version: "26.1.10909125" # Stable NDK version for modern cargo-ndk compatibility
+          packages: '' # Skips problematic sdkmanager package installations
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -34,7 +34,6 @@ jobs:
           cargo ndk \
             --target arm64-v8a \
             --platform 24 \
-            --build-dir target \
             build --release -vv
 
       - name: Upload Native Library Artifact
