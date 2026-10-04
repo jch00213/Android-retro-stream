@@ -169,12 +169,15 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor
         return JNI_FALSE;
     }
 
+    // WINDOW_FORMAT_RGBA_8888 corresponds to native format value 1
+    const WINDOW_FORMAT_RGBA_8888: i32 = 1;
+
     unsafe {
         ndk_sys::ANativeWindow_setBuffersGeometry(
             window,
             width,
             height,
-            ndk_sys::WINDOW_FORMAT_RGBA_8888 as i32,
+            WINDOW_FORMAT_RGBA_8888,
         );
         ndk_sys::ANativeWindow_acquire(window as *mut ndk_sys::ANativeWindow);
     }
