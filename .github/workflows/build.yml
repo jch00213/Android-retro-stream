@@ -22,15 +22,27 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
 
-      - name: Build Rust Crate for ARM64 Android via cargo-ndk
+      - name: Build Rust Crate for ARM64 Android Manually
         env:
           RUST_BACKTRACE: 1
         run: |
-          cargo ndk \
-            --target arm64-v8a \
-            --platform 24 \
-            --release \
-            build --release
+          # Locate the Android NDK installed on GitHub Actions runners
+          export NDK_HOME="${ANDROID_SDK_ROOT}/ndk-bundle"
+          if [ ! -d "$NDK_HOME" ]; then
+            # Fallback to finding it in the NDK directory
+            NDK_HOME=$(ls -d ${ANDROID_SDK_ROOT}/ndk/* | sort -V | tail -n 1)
+          fi
+          
+          echo "Using NDK_HOME at: $NDK_HOME"
+          
+          # Setup toolchain paths for aarch64 (API 24)
+          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          export CC="$TOOLCHAIN/bin/aarch64-linux-android24-clang"
+          export AR="$TOOLCHAIN/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC"
+
+          # Build directly using standard cargo flags
+          cargo build --target aarch64-linux-android --release
 
       - name: Upload Native Library Artifact
         uses: actions/upload-artifact@v4
