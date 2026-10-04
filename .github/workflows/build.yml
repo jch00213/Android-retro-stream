@@ -17,14 +17,10 @@ jobs:
       - name: Set up Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-        # Ensure the target is added directly to the toolchain definition
           targets: aarch64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
-
-      - name: Explicitly Add Android Target (Safety Check)
-        run: rustup target add aarch64-linux-android
 
       - name: Build Rust Crate for ARM64 Android via cargo-ndk
         env:
@@ -33,7 +29,8 @@ jobs:
           cargo ndk \
             --target arm64-v8a \
             --platform 24 \
-            build --release
+            --release \
+            build
 
       - name: Upload Native Library Artifact
         uses: actions/upload-artifact@v4
