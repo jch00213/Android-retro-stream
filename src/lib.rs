@@ -114,6 +114,47 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_sendVideoPacket(
     let _ = server.socket.send_to(&packet, &server.target_addr);
 }
 
+/// Sends lightweight desktop command or app state metadata packets over UDP to the TV receiver
+#[no_mangle]
+pub extern "C" fn Java_com_jeremy_stream_NativeBridge_sendDataPacket(
+    mut env: JNIEnv,
+    _class: JClass,
+    data_array: JByteArray,
+    timestamp_ms: jlong,
+) {
+    let server_lock_guard = match SERVER.read() {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+
+    let server_mutex = match &*server_lock_guard {
+        Some(s) => s,
+        None => return,
+    };
+
+    let server = match server_mutex.lock() {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+
+    let bytes = match env.convert_byte_array(&data_array) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+
+    if bytes.is_empty() {
+        return;
+    }
+
+    // Prefix with a data type marker (e.g., 0xFF for control/state payloads) and timestamp
+    let mut packet = Vec::with_capacity(9 + bytes.len());
+    packet.push(0xFF); 
+    packet.extend_from_slice(&timestamp_ms.to_le_bytes());
+    packet.extend_from_slice(&bytes);
+
+    let _ = server.socket.send_to(&packet, &server.target_addr);
+}
+
 /// Initializes an inbound control listener socket to receive gamepad/touch events from the TV
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
