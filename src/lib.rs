@@ -35,7 +35,7 @@ fn bridge_worker(event_type: u8, code: i32, value: i32) {
     }
 }
 
-/// Initializes the UDP socket bound to a local port and sets the target receiver IP
+/// Initializes the UDP socket bound to an ephemeral local port and sets the target receiver IP and port
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
     mut env: JNIEnv,
@@ -48,7 +48,8 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
         Err(_) => return JNI_FALSE,
     };
 
-    let bind_addr = format!("0.0.0.0:{}", port);
+    // Bind to an ephemeral local port (0) to avoid port collisions with port 9000
+    let bind_addr = "0.0.0.0:0";
     
     let socket = match UdpSocket::bind(&bind_addr) {
         Ok(s) => s,
@@ -60,6 +61,7 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
 
     let _ = socket.set_nonblocking(true);
     
+    // Explicitly target the TV receiver listening on port 9000
     let server = StreamingServer {
         socket,
         target_addr: format!("{}:{}", ip_str, port),
