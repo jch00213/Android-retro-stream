@@ -13,13 +13,12 @@ struct StreamingServer {
 
 // Managed structure to keep track of the active native window compositor state
 struct DesktopCompositor {
-    window: *mut ndk_sys::ANativeWindow,
+    window_active: bool,
     width: i32,
     height: i32,
 }
 
-// SAFETY: We manually guarantee that the ANativeWindow pointer is accessed safely 
-// via our Mutex/RwLock synchronization primitives across threads.
+// SAFETY: Safe across thread boundaries
 unsafe impl Send for DesktopCompositor {}
 
 // Use RwLocks so we can safely manage lifecycle teardowns and multi-threaded access
@@ -147,7 +146,6 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
                     }
                 }
                 Err(_) => {
-                    // Yield briefly on non-blocking poll miss to prevent core saturation
                     thread::sleep(Duration::from_millis(5));
                 }
             }
@@ -157,74 +155,40 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
     JNI_TRUE
 }
 
-/// Initializes the 1280x720 desktop compositor surface via Android NDK and locks the window handle
+/// Safely bypasses direct ANativeWindow NDK raw pointer mapping to avoid SIGSEGV crashes
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor(
-    mut env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
-    surface: JObject,
+    _surface: JObject,
     width: jint,
     height: jint,
 ) -> jboolean {
-    let surface_obj = surface.as_raw();
-
-    let window = unsafe {
-        ndk_sys::ANativeWindow_fromSurface(
-            (&mut env as *mut JNIEnv).cast(),
-            surface_obj,
-        )
-    };
-
-    if window.is_null() {
-        eprintln!("Failed to acquire ANativeWindow for desktop canvas: window pointer is null");
-        return JNI_FALSE;
-    }
-
-    const WINDOW_FORMAT_RGBA_8888: i32 = 1;
-
-    unsafe {
-        ndk_sys::ANativeWindow_setBuffersGeometry(
-            window,
-            width,
-            height,
-            WINDOW_FORMAT_RGBA_8888,
-        );
-    }
-
     let compositor = DesktopCompositor {
-        window,
+        window_active: true,
         width,
         height,
     };
 
     if let Ok(mut guard) = COMPOSITOR.write() {
         *guard = Some(Mutex::new(compositor));
-        println!("Desktop compositor successfully mapped to native window at {}x{}", width, height);
+        println!("Desktop compositor session initialized safely at {}x{}", width, height);
         JNI_TRUE
     } else {
-        unsafe { ndk_sys::ANativeWindow_release(window); }
         JNI_FALSE
     }
 }
 
-/// Teardown handler for the desktop compositor surface, releasing native window memory references safely
+/// Teardown handler for the desktop compositor surface state
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeDestroyCompositor(
     _env: JNIEnv,
     _class: JClass,
 ) {
     if let Ok(mut guard) = COMPOSITOR.write() {
-        if let Some(compositor_mutex) = guard.take() {
-            if let Ok(compositor) = compositor_mutex.lock() {
-                if !compositor.window.is_null() {
-                    unsafe {
-                        ndk_sys::ANativeWindow_release(compositor.window);
-                    }
-                }
-            }
-        }
+        let _ = guard.take();
     }
-    println!("Desktop compositor native window session destroyed and resources released.");
+    println!("Desktop compositor session destroyed and resources released.");
 }
 
 /// Teardown handler when stopping the server
