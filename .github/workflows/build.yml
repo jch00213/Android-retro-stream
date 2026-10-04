@@ -19,24 +19,13 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Install Android NDK via SDK Manager
-        run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
-          
-          echo "y" | sdkmanager "ndk;26.1.10909123"
-          
-          NDK_PATH="$ANDROID_HOME/ndk/26.1.10909123"
-          echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
-          echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
 
-      - name: Build Rust Crate for ARM64 Android
-        env:
-          CC_aarch64_linux_android: aarch64-linux-android24-clang
-          AR_aarch64-linux-android: llvm-ar
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: aarch64-linux-android24-clang
+      - name: Build Rust Crate for ARM64 Android via cargo-ndk
         run: |
-          cargo build --target aarch64-linux-android --release
+          # cargo-ndk automatically configures linkers and finds the runner's NDK
+          cargo ndk -t arm64-v8a --release build
 
       - name: Upload Native Library Artifact
         uses: actions/upload-artifact@v4
