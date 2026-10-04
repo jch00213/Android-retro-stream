@@ -21,7 +21,11 @@ jobs:
 
       - name: Install Android NDK via SDK Manager
         run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+          
           echo "y" | sdkmanager "ndk;26.1.10909123"
+          
           NDK_PATH="$ANDROID_HOME/ndk/26.1.10909123"
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
