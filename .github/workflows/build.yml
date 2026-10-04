@@ -1,0 +1,40 @@
+name: Build Android Rust Core
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Android NDK & Toolchains
+        uses: nttld/setup-ndk@v3
+        with:
+          ndk-version: r26c
+          add-to-path: true
+
+      - name: Build Rust Crate for ARM64 Android
+        env:
+          CC_aarch64_linux_android: aarch64-linux-android24-clang
+          AR_aarch64-linux-android: llvm-ar
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: aarch64-linux-android24-clang
+        run: |
+          cargo build --target aarch64-linux-android --release
+
+      - name: Upload Native Library Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: librust_core
+          path: target/aarch64-linux-android/release/librust_core.so
