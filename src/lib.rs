@@ -12,7 +12,7 @@ struct StreamingServer {
 
 // Managed structure to keep track of the active native window compositor state
 struct DesktopCompositor {
-    window: *mut android_ndk_sys::ANativeWindow,
+    window: *mut ndk_sys::ANativeWindow,
     width: i32,
     height: i32,
 }
@@ -150,14 +150,14 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
 /// Initializes the 1280x720 desktop compositor surface via Android NDK and locks the window handle
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     surface: JObject,
     width: jint,
     height: jint,
 ) -> jboolean {
     let window = unsafe {
-        android_ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), *surface)
+        ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), *surface)
     };
 
     if window.is_null() {
@@ -166,14 +166,13 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor
     }
 
     unsafe {
-        android_ndk_sys::ANativeWindow_setBuffersGeometry(
+        ndk_sys::ANativeWindow_setBuffersGeometry(
             window,
             width,
             height,
-            android_ndk_sys::WINDOW_FORMAT_RGBA_8888 as i32,
+            ndk_sys::WINDOW_FORMAT_RGBA_8888 as i32,
         );
-        // Acquire a strong reference count on the native window to prevent premature collection
-        android_ndk_sys::ANativeWindow_acquire(window);
+        ndk_sys::ANativeWindow_acquire(window as *mut ndk_sys::ANativeWindow);
     }
 
     let compositor = DesktopCompositor {
@@ -187,7 +186,7 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor
         println!("Desktop compositor successfully mapped to native window at {}x{}", width, height);
         JNI_TRUE
     } else {
-        unsafe { android_ndk_sys::ANativeWindow_release(window); }
+        unsafe { ndk_sys::ANativeWindow_release(window); }
         JNI_FALSE
     }
 }
@@ -203,7 +202,7 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeDestroyComposi
             if let Ok(compositor) = compositor_mutex.lock() {
                 if !compositor.window.is_null() {
                     unsafe {
-                        android_ndk_sys::ANativeWindow_release(compositor.window);
+                        ndk_sys::ANativeWindow_release(compositor.window);
                     }
                 }
             }
