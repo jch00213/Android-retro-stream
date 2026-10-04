@@ -1,4 +1,4 @@
-use jni::objects::{JClass, JByteArray};
+use jni::objects::{JClass, JByteArray, JString};
 use jni::sys::{jboolean, jint, jlong, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 use std::net::UdpSocket;
@@ -12,13 +12,19 @@ struct StreamingServer {
 // Use an RwLock so we can safely tear down and re-bind across stream sessions
 static SERVER: RwLock<Option<Mutex<StreamingServer>>> = RwLock::new(None);
 
-/// Initializes the UDP socket bound to a local port
+/// Initializes the UDP socket bound to a local port and sets the target receiver IP
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     port: jint,
+    target_ip: JString,
 ) -> jboolean {
+    let ip_str: String = match env.get_string(&target_ip) {
+        Ok(s) => s.into(),
+        Err(_) => return JNI_FALSE,
+    };
+
     let bind_addr = format!("0.0.0.0:{}", port);
     
     let socket = match UdpSocket::bind(&bind_addr) {
@@ -33,7 +39,7 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initServer(
     
     let server = StreamingServer {
         socket,
-        target_addr: "192.168.49.1:9000".to_string(),
+        target_addr: format!("{}:{}", ip_str, port),
     };
 
     if let Ok(mut guard) = SERVER.write() {
