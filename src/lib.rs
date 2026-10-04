@@ -13,9 +13,15 @@ struct StreamingServer {
 // Use an RwLock so we can safely tear down and re-bind across stream sessions
 static SERVER: RwLock<Option<Mutex<StreamingServer>>> = RwLock::new(None);
 
-// External declaration for your refactored C bridge worker function in hid_bridge.c
-extern "C" {
-    fn bridge_worker(event_type: u8, code: i32, value: i32);
+/// Native Rust worker handling incoming gamepad/touch controller commands from the TV receiver
+fn bridge_worker(event_type: u8, code: i32, value: i32) {
+    // event_type: 1 = Key Event (Button), 2 = Motion Event (Axis/Joystick)
+    if event_type == 1 {
+        let action = if value == 1 { "DOWN" } else { "UP" };
+        println!("Gamepad Button -> Code: {}, Action: {}", code, action);
+    } else if event_type == 2 {
+        println!("Joystick Axis -> Code: {}, Value: {}", code, value);
+    }
 }
 
 /// Initializes the UDP socket bound to a local port and sets the target receiver IP
@@ -125,10 +131,8 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
                         let code = i32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
                         let value = i32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
 
-                        // Forward directly into your refactored C bridge worker
-                        unsafe {
-                            bridge_worker(event_type, code, value);
-                        }
+                        // Forward directly into our native Rust worker function
+                        bridge_worker(event_type, code, value);
                     }
                 }
                 Err(_) => break,
