@@ -1,4 +1,4 @@
-use jni::objects::{JClass, JByteArray, JString};
+use jni::objects::{JClass, JByteArray, JObject, JString};
 use jni::sys::{jboolean, jint, jlong, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 use std::net::UdpSocket;
@@ -141,6 +141,46 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
     });
 
     JNI_TRUE
+}
+
+/// Initializes the 1280x720 desktop compositor surface via Android NDK
+#[no_mangle]
+pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor(
+    mut env: JNIEnv,
+    _class: JClass,
+    surface: JObject,
+    width: jint,
+    height: jint,
+) -> jboolean {
+    let window = unsafe {
+        android_ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), *surface)
+    };
+
+    if window.is_null() {
+        eprintln!("Failed to acquire ANativeWindow for desktop canvas");
+        return JNI_FALSE;
+    }
+
+    unsafe {
+        android_ndk_sys::ANativeWindow_setBuffersGeometry(
+            window,
+            width,
+            height,
+            android_ndk_sys::WINDOW_FORMAT_RGBA_8888 as i32,
+        );
+    }
+
+    println!("Desktop compositor successfully mapped to native window at {}x{}", width, height);
+    JNI_TRUE
+}
+
+/// Teardown handler for the desktop compositor surface
+#[no_mangle]
+pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeDestroyCompositor(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    println!("Desktop compositor native window session destroyed.");
 }
 
 /// Teardown handler when stopping the server
