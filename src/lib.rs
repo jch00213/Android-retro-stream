@@ -17,6 +17,10 @@ struct DesktopCompositor {
     height: i32,
 }
 
+// SAFETY: We manually guarantee that the ANativeWindow pointer is accessed safely 
+// via our Mutex/RwLock synchronization primitives across threads.
+unsafe impl Send for DesktopCompositor {}
+
 // Use RwLocks so we can safely manage lifecycle teardowns and multi-threaded access
 static SERVER: RwLock<Option<Mutex<StreamingServer>>> = RwLock::new(None);
 static COMPOSITOR: RwLock<Option<Mutex<DesktopCompositor>>> = RwLock::new(None);
