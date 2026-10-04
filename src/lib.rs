@@ -160,18 +160,23 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
 /// Initializes the 1280x720 desktop compositor surface via Android NDK and locks the window handle
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     surface: JObject,
     width: jint,
     height: jint,
 ) -> jboolean {
+    let surface_obj = surface.as_raw();
+
     let window = unsafe {
-        ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), *surface)
+        ndk_sys::ANativeWindow_fromSurface(
+            (&mut env as *mut JNIEnv).cast(),
+            surface_obj,
+        )
     };
 
     if window.is_null() {
-        eprintln!("Failed to acquire ANativeWindow for desktop canvas");
+        eprintln!("Failed to acquire ANativeWindow for desktop canvas: window pointer is null");
         return JNI_FALSE;
     }
 
@@ -184,7 +189,6 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor
             height,
             WINDOW_FORMAT_RGBA_8888,
         );
-        ndk_sys::ANativeWindow_acquire(window as *mut ndk_sys::ANativeWindow);
     }
 
     let compositor = DesktopCompositor {
