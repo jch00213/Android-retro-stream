@@ -10,12 +10,19 @@ struct StreamingServer {
     target_addr: String,
 }
 
-// Use an RwLock so we can safely tear down and re-bind across stream sessions
+// Managed structure to keep track of the active native window compositor state
+struct DesktopCompositor {
+    window: *mut android_ndk_sys::ANativeWindow,
+    width: i32,
+    height: i32,
+}
+
+// Use RwLocks so we can safely manage lifecycle teardowns and multi-threaded access
 static SERVER: RwLock<Option<Mutex<StreamingServer>>> = RwLock::new(None);
+static COMPOSITOR: RwLock<Option<Mutex<DesktopCompositor>>> = RwLock::new(None);
 
 /// Native Rust worker handling incoming gamepad/touch controller commands from the TV receiver
 fn bridge_worker(event_type: u8, code: i32, value: i32) {
-    // event_type: 1 = Key Event (Button), 2 = Motion Event (Axis/Joystick)
     if event_type == 1 {
         let action = if value == 1 { "DOWN" } else { "UP" };
         println!("Gamepad Button -> Code: {}, Action: {}", code, action);
@@ -120,7 +127,6 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
         }
     };
 
-    // Spawn dedicated background worker thread to process incoming control packets asynchronously
     thread::spawn(move || {
         let mut buf = [0u8; 9];
         loop {
@@ -130,8 +136,6 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
                         let event_type = buf[0];
                         let code = i32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
                         let value = i32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-
-                        // Forward directly into our native Rust worker function
                         bridge_worker(event_type, code, value);
                     }
                 }
@@ -143,7 +147,7 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
     JNI_TRUE
 }
 
-/// Initializes the 1280x720 desktop compositor surface via Android NDK
+/// Initializes the 1280x720 desktop compositor surface via Android NDK and locks the window handle
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor(
     mut env: JNIEnv,
@@ -168,19 +172,44 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor
             height,
             android_ndk_sys::WINDOW_FORMAT_RGBA_8888 as i32,
         );
+        // Acquire a strong reference count on the native window to prevent premature collection
+        android_ndk_sys::ANativeWindow_acquire(window);
     }
 
-    println!("Desktop compositor successfully mapped to native window at {}x{}", width, height);
-    JNI_TRUE
+    let compositor = DesktopCompositor {
+        window,
+        width,
+        height,
+    };
+
+    if let Ok(mut guard) = COMPOSITOR.write() {
+        *guard = Some(Mutex::new(compositor));
+        println!("Desktop compositor successfully mapped to native window at {}x{}", width, height);
+        JNI_TRUE
+    } else {
+        unsafe { android_ndk_sys::ANativeWindow_release(window); }
+        JNI_FALSE
+    }
 }
 
-/// Teardown handler for the desktop compositor surface
+/// Teardown handler for the desktop compositor surface, releasing native window memory references safely
 #[no_mangle]
 pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeDestroyCompositor(
     _env: JNIEnv,
     _class: JClass,
 ) {
-    println!("Desktop compositor native window session destroyed.");
+    if let Ok(mut guard) = COMPOSITOR.write() {
+        if let Some(compositor_mutex) = guard.take() {
+            if let Ok(compositor) = compositor_mutex.lock() {
+                if !compositor.window.is_null() {
+                    unsafe {
+                        android_ndk_sys::ANativeWindow_release(compositor.window);
+                    }
+                }
+            }
+        }
+    }
+    println!("Desktop compositor native window session destroyed and resources released.");
 }
 
 /// Teardown handler when stopping the server
