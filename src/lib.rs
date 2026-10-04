@@ -4,6 +4,7 @@ use jni::JNIEnv;
 use std::net::UdpSocket;
 use std::sync::{Mutex, RwLock};
 use std::thread;
+use std::time::Duration;
 
 struct StreamingServer {
     socket: UdpSocket,
@@ -126,10 +127,12 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
     let socket = match UdpSocket::bind(&bind_addr) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Failed to bind input control UDP socket: {}", e);
+            eprintln!("Failed to bind input control UDP socket on port {}: {}", port, e);
             return JNI_FALSE;
         }
     };
+
+    let _ = socket.set_nonblocking(true);
 
     thread::spawn(move || {
         let mut buf = [0u8; 9];
@@ -143,7 +146,10 @@ pub extern "C" fn Java_com_jeremy_stream_NativeBridge_initInputListener(
                         bridge_worker(event_type, code, value);
                     }
                 }
-                Err(_) => break,
+                Err(_) => {
+                    // Yield briefly on non-blocking poll miss to prevent core saturation
+                    thread::sleep(Duration::from_millis(5));
+                }
             }
         }
     });
@@ -169,7 +175,6 @@ pub extern "C" fn Java_com_jeremy_stream_DesktopHostManager_nativeInitCompositor
         return JNI_FALSE;
     }
 
-    // WINDOW_FORMAT_RGBA_8888 corresponds to native format value 1
     const WINDOW_FORMAT_RGBA_8888: i32 = 1;
 
     unsafe {
